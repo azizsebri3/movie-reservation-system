@@ -21,5 +21,6 @@ class Movie(MovieBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = {
+    "from_attributes": True
+}

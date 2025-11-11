@@ -34,6 +34,26 @@ def get_movie(movie_id: int, db: Session = Depends(get_db)):
     return movie
 
 
+@router.patch("/{movie_id}", response_model=Movie)
+def update_movie(movie_id: int, movie: MovieCreate, db: Session = Depends(get_db)):
+    """Update un film par son ID"""
+    db_movie = db.query(MovieModel).filter(MovieModel.id == movie_id).first()
+    if db_movie is None:
+        raise HTTPException(status_code=404, detail="Film non trouvé")
+    
+    old_data = db_movie.__dict__.copy()
+    
+    #il faut faire mise a jour champ par champ
+    for key, value in movie.model_dump().items():
+        setattr(db_movie, key, value)
+        
+    db.commit()
+    db.refresh(db_movie)
+    return db_movie
+    
+    
+
+
 @router.delete("/{movie_id}")
 def delete_movie(movie_id: int, db: Session = Depends(get_db)):
     movie = db.query(MovieModel).filter(MovieModel.id == movie_id).first()
@@ -41,8 +61,7 @@ def delete_movie(movie_id: int, db: Session = Depends(get_db)):
     if movie is None:
         raise HTTPException(
             status_code=404,  
-            detail="On a pas trouvé le Film pour le supprimer !"
-            
+            detail="On a pas trouvé le Film pour le supprimer !"    
         )
     db.delete(movie)
     db.commit()

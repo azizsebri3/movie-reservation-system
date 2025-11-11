@@ -1,12 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base
-from .api.endpoints import movies
+from app.routers import router as api_router
+
+
 
 # Créer les tables dans la base de données
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="CineEntry API")
+app = FastAPI(title="Movie Reservation System")
 
 # Configuration CORS pour permettre les requêtes depuis le frontend
 app.add_middleware(
@@ -22,4 +24,4 @@ def read_root():
     return {"message": "Welcome to the CineEntry API!"}
 
 # Inclure les routes des films
-app.include_router(movies.router, prefix="/api/movies", tags=["movies"])
+app.include_router(api_router)
