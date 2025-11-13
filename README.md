@@ -88,27 +88,31 @@ Clean REST API design and error handling
 ---
 🧩 Project Structure
 
+```bash
 app/
-├── core/              # Config, constants, shared utils
-├── routers/           # API routes
+├── core/               # Config, constants, shared utils
+├── routers/            # API routes
 │   ├── movies.py
 │   ├── showtime.py
 │   └── reservation.py
-├── services/          # Business logic separated from routers
+├── services/           # Business logic separated from routers
 │   ├── movie_service.py
 │   ├── showtime_service.py
 │   └── reservation_service.py
-├── models/            # SQLAlchemy models
+├── models/             # SQLAlchemy models
 │   ├── movie.py
 │   ├── showtime.py
 │   └── reservation.py
-├── schemas/           # Pydantic models for validation
+├── schemas/            # Pydantic models for validation
 │   ├── movie.py
 │   ├── showtime.py
 │   └── reservation.py
-├── utils/             # Helpers (seat generation, etc.)
-├── database.py        # Database engine and get_db()
-└── main.py            # Application entrypoint
+├── utils/              # Helpers (seat generation, etc.)
+├── database.py         # Database engine and get_db()
+└── main.py             # Application entrypoint
+```
+
+
 
 
 ## 🧭 Learning Journey
