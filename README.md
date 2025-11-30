@@ -1,4 +1,4 @@
-# 🎬 Movie Reservation System — Backend (FastAPI)
+# 🎬 cineentry-backend — Movie Reservation System (FastAPI)
 
 A backend REST API for managing **movies**, **showtimes**, **users**, and **seat reservations**.  
 Built with **FastAPI**, **SQLAlchemy**, and **PostgreSQL**, structured using a clean architecture with services, routers, and tests.
