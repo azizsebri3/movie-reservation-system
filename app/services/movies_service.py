@@ -26,28 +26,37 @@ def get_movie_service(movie_id: int, db: Session):
 
 
 def update_movie_service(movie_id: int, movie_data, db: Session):
-    db_movie = db.query(MovieModel).filter(MovieModel.id == movie_id).first()
+    try:
+        movie = db.query(MovieModel).filter(MovieModel.id == movie_id).first()
+        if movie is None:
+            raise HTTPException(status_code=404, detail="Film non trouvé")
 
-    if db_movie is None:
-        raise HTTPException(status_code=404, detail="Film non trouvé")
+        for key, value in movie_data.model_dump().items():
+            setattr(movie, key, value)
 
-    # Update champ par champ
-    for key, value in movie_data.model_dump().items():
-        setattr(db_movie, key, value)
+        db.add(movie)
 
-    db.commit()
-    db.refresh(db_movie)
-    return db_movie
+        # ✅ COMMIT AUTOMATIQUE ICI (si aucune exception)
+        db.refresh(movie)
+        return movie
+    except Exception:
+        db.rollback()  # ✅ Sécurité supplémentaire
+        raise
 
 
 def delete_movie_service(movie_id: int, db: Session):
-    movie = db.query(MovieModel).filter(MovieModel.id == movie_id).first()
-    if movie is None:
-        raise HTTPException(status_code=404, detail="Film non trouvé")
+    try:
+        movie = db.query(MovieModel).filter(MovieModel.id == movie_id).first()
+        if movie is None:
+            raise HTTPException(status_code=404, detail="Film non trouvé")
 
-    db.delete(movie)
-    db.commit()
-    return movie
+        db.delete(movie)
+
+        # ✅ COMMIT AUTOMATIQUE ICI (si aucune exception)
+        return movie
+    except Exception:
+        db.rollback()  # ✅ Sécurité supplémentaire
+        raise
 
 def get_movies_by_showtime_date_service(showtime_date, db: Session):
     if not showtime_date:

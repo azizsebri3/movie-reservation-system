@@ -10,99 +10,176 @@ from ..utils.seats import generate_seats
 def get_all_reservations(db: Session):
     return db.query(ReservationModel).all()
 
-
 def create_reservation_service(reservation_data, db: Session, user_name: str):
-    #1. ici verifier que le showtime existe 
-    showtime = db.query(ShowtimeModel).filter(
-        ShowtimeModel.id == reservation_data.showtime_id
-    ).first()
+    try:
+        # ✅ DÉBUT TRANSACTION
+        with db.begin():
 
-    if not showtime:
-        raise HTTPException(status_code=404, detail="Showtime not found")
+            # 1️⃣ Verrouiller la séance
+            showtime = db.query(ShowtimeModel).filter(
+                ShowtimeModel.id == reservation_data.showtime_id
+            ).with_for_update().first()   # ✅ LOCK SQL
 
-    if showtime.capacity <= 0:
-        raise HTTPException(status_code=400, detail="Showtime has no seats configured")
+            if not showtime:
+                raise HTTPException(status_code=404, detail="Showtime not found")
 
-    #ici je vais generer la salle complete (l'utilisation de la fonction generate_seats )
-    all_seats = generate_seats(showtime.capacity)
-    #je verife si la siege dispo ou pas
-    if reservation_data.seat_number not in all_seats:
-        raise HTTPException(status_code=400, detail="Seat does not exist in this hall")
-    
-    #ici je vais checker si le siege est deja reservé ou pas (dans la filtre je fais la jointure de pk et fk et il faut la statut etre confirmé)
-    reserved = db.query(ReservationModel).filter(
-        ReservationModel.showtime_id == reservation_data.showtime_id,
-        ReservationModel.seat_number == reservation_data.seat_number,
-        ReservationModel.status == "confirmed"
-    ).first()
-    
-    if reserved:
-        raise HTTPException(status_code=400, detail="Seat already reserved") 
-    
-    
-    db_reservation = ReservationModel(
-        **reservation_data.model_dump(),
-        user_name=user_name,
-        status="confirmed"
-    )
-    db.add(db_reservation)
-    db.commit()
-    db.refresh(db_reservation)
+            if showtime.capacity <= 0:
+                raise HTTPException(status_code=400, detail="Showtime has no seats configured")
 
-    return db_reservation
+            # 2️⃣ Génération des sièges
+            all_seats = generate_seats(showtime.capacity)
 
+            if reservation_data.seat_number not in all_seats:
+                raise HTTPException(status_code=400, detail="Seat does not exist in this hall")
 
-def get_reservation_service(reservation_id: int, db: Session):
-    reservation = db.query(ReservationModel).filter(
-        ReservationModel.id == reservation_id
-    ).first()
+            # 3️⃣ Vérifier si le siège est déjà réservé (LOCK aussi)
+            reserved = db.query(ReservationModel).filter(
+                ReservationModel.showtime_id == reservation_data.showtime_id,
+                ReservationModel.seat_number == reservation_data.seat_number,
+                ReservationModel.status == "confirmed"
+            ).with_for_update().first()   # ✅ LOCK
 
-    if not reservation:
-        raise HTTPException(status_code=404, detail="Reservation not found")
+            if reserved:
+                raise HTTPException(status_code=400, detail="Seat already reserved")
 
-    return reservation
+            # 4️⃣ Créer la réservation
+            db_reservation = ReservationModel(
+                **reservation_data.model_dump(),
+                user_name=user_name,
+                status="confirmed"
+            )
+
+            db.add(db_reservation)
+
+        # ✅ COMMIT AUTOMATIQUE ICI (si aucune exception)
+        db.refresh(db_reservation)
+        return db_reservation
+
+    except Exception:
+        db.rollback()  # ✅ Sécurité supplémentaire
+        raise
+
+def update_reservation_service(
+    reservation_id: int,
+    reservation_data,
+    db: Session,
+    user_name: str
+):
+    try:
+        reservation = (
+            db.query(ReservationModel)
+            .filter(ReservationModel.id == reservation_id)
+            .with_for_update()
+            .first()
+        )
+
+        if not reservation:
+            raise HTTPException(status_code=404, detail="Reservation not found")
+
+        if reservation.user_name != user_name:
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+        # 🔒 Lock du showtime aussi (important)
+        showtime = (
+            db.query(ShowtimeModel)
+            .filter(ShowtimeModel.id == reservation.showtime_id)
+            .with_for_update()
+            .first()
+        )
+
+        # ✅ Changement de siège
+        if reservation_data.seat_number:
+            all_seats = generate_seats(showtime.capacity)
+
+            if reservation_data.seat_number not in all_seats:
+                raise HTTPException(status_code=400, detail="Seat does not exist")
+
+            already_reserved = (
+                db.query(ReservationModel)
+                .filter(
+                    ReservationModel.showtime_id == reservation.showtime_id,
+                    ReservationModel.seat_number == reservation_data.seat_number,
+                    ReservationModel.status == "confirmed",
+                    ReservationModel.id != reservation.id
+                )
+                .with_for_update()
+                .first()
+            )
+
+            if already_reserved:
+                raise HTTPException(status_code=400, detail="Seat already reserved")
+
+            reservation.seat_number = reservation_data.seat_number
+
+        # ✅ Changement de statut
+        if reservation_data.status:
+            allowed_status = ["confirmed", "cancelled"]
+
+            if reservation_data.status not in allowed_status:
+                raise HTTPException(status_code=400, detail="Invalid status")
+
+            reservation.status = reservation_data.status
+
+        db.commit()
+        db.refresh(reservation)
+        return reservation
+
+    except Exception:
+        db.rollback()
+        raise
 
 
 def delete_reservation_service(reservation_id: int, db: Session):
-    reservation = db.query(ReservationModel).filter(
-        ReservationModel.id == reservation_id
-    ).first()
+    try:
+        with db.begin():
 
-    if not reservation:
-        raise HTTPException(status_code=404, detail="Reservation not found")
+            reservation = (
+                db.query(ReservationModel)
+                .filter(ReservationModel.id == reservation_id)
+                .with_for_update()
+                .first()
+            )
 
-    db.delete(reservation)
-    db.commit()
-    return reservation
+            if not reservation:
+                raise HTTPException(status_code=404, detail="Reservation not found")
 
+            db.delete(reservation)
 
+        return reservation
+
+    except Exception:
+        raise
 
 def cancel_reservation_service(reservation_id: int, db: Session):
-    # 1️⃣ Récupérer la réservation
-    reservation = db.query(ReservationModel).filter(
-        ReservationModel.id == reservation_id
-    ).first()
+    try:
+        with db.begin():
 
-    if not reservation:
-        raise HTTPException(status_code=404, detail="Reservation not found")
+            reservation = (
+                db.query(ReservationModel)
+                .filter(ReservationModel.id == reservation_id)
+                .with_for_update()
+                .first()
+            )
 
-    # 2️⃣ Vérifier que le showtime est à venir
-    showtime = db.query(ShowtimeModel).filter(
-        ShowtimeModel.id == reservation.showtime_id
-    ).first()
+            if not reservation:
+                raise HTTPException(status_code=404, detail="Reservation not found")
 
-    if not showtime:
-        raise HTTPException(status_code=404, detail="Showtime not found")
+            showtime = (
+                db.query(ShowtimeModel)
+                .filter(ShowtimeModel.id == reservation.showtime_id)
+                .with_for_update()
+                .first()
+            )
 
-    # On compare les dates (UTC)
-    print(showtime.start_time)
-    print(datetime.now(timezone.utc))
-    if showtime.start_time <= datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="Cannot cancel past reservations")
+            if not showtime:
+                raise HTTPException(status_code=404, detail="Showtime not found")
 
-    # 3️⃣ Mettre à jour le statut
-    reservation.status = "cancelled"
-    db.commit()
-    db.refresh(reservation)
+            if showtime.start_time <= datetime.now(timezone.utc):
+                raise HTTPException(status_code=400, detail="Cannot cancel past reservations")
 
-    return {"message": "Reservation cancelled successfully", "reservation": reservation}
+            reservation.status = "cancelled"
+
+        return {"message": "Reservation cancelled successfully", "reservation": reservation}
+
+    except Exception:
+        raise

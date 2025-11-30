@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -21,3 +22,12 @@ class ReservationResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+class ReservationUpdate(BaseModel):
+    seat_number: str | None = None
+    status: str | None = None
+    
+    
+    model_config = {
+        "from_attributes": True
+    }

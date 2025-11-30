@@ -4,13 +4,14 @@ from typing import List
 from app.database import get_db
 from app.core.deps import get_current_user
 from app.core.security import require_role
-from app.schemas.reservation import ReservationResponse, ReservationCreate
+from app.schemas.reservation import ReservationResponse, ReservationCreate, ReservationUpdate
 from app.services.reservation_service import (
     cancel_reservation_service,
     get_all_reservations,
     create_reservation_service,
-    get_reservation_service,
+    # get_reservation_service,
     delete_reservation_service,
+    update_reservation_service
 )
 
 router = APIRouter()
@@ -33,13 +34,13 @@ def create_reservation(
     return create_reservation_service(reservation, db, current_user.username)
 
 # User: get their own reservation
-@router.get("/{reservation_id}", response_model=ReservationResponse)
-def get_reservation(
-    reservation_id: int,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
-):
-    return get_reservation_service(reservation_id, db, current_user)
+# @router.get("/{reservation_id}", response_model=ReservationResponse)
+# def get_reservation(
+#     reservation_id: int,
+#     db: Session = Depends(get_db),
+#     current_user = Depends(get_current_user)
+# ):
+#     return get_reservation_service(reservation_id, db, current_user)
 
 # Admin-only: delete any reservation
 @router.delete("/{reservation_id}", response_model=ReservationResponse)
@@ -58,3 +59,13 @@ def cancel_reservation(
     current_user = Depends(get_current_user) # que l utilisateur peut annuler sa propre réservation
 ):
     return cancel_reservation_service(reservation_id, db)
+
+
+@router.patch("/{reservation_id}/update")
+def update_reservation(
+    reservation_id: int,
+    reservation_data: ReservationUpdate,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    return update_reservation_service(reservation_id, reservation_data, db, current_user.username)   
